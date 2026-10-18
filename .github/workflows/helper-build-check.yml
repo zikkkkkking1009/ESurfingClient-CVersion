@@ -7,10 +7,53 @@ permissions:
   actions: write
 jobs:
   windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x86, x86_64, aarch64]
     uses: ./.github/workflows/1-build-windows-all.yml
     with:
       full_version: 2.1.7-r4
-      architecture: x86_64
+      architecture: ${{ matrix.architecture }}
       curl_version: 8.20.0
       tail_wind_labs_version: v4.3.0
       llvm_mingw_version: '20260922'
+  check:
+    needs: windows
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            architecture: x86
+          - runner: windows-2022
+            architecture: x86_64
+          - runner: windows-11-arm
+            architecture: aarch64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: esurfingclient-2.1.7-r4-windows-${{ matrix.architecture }}
+          path: artifact
+      - name: Inspect archive and run read-only helper checks
+        shell: powershell
+        env:
+          TEST_ARCH: ${{ matrix.architecture }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Expand-Archive artifact/*.zip package
+          $client = (Get-ChildItem package/ESurfingClient*.exe).FullName
+          & tools/windows-network-panel/Test-ReleasePackage.ps1 -Root package -Architecture $env:TEST_ARCH
+          & package/tools/windows-network-panel/Get-ValidationEnvironment.ps1 -ClientPath $client
+          & tools/windows-network-panel/Test-NetworkPanel.ps1
+          & tools/windows-network-panel/Test-HotspotBridge.ps1
+          node tools/windows-network-panel/test-traffic.cjs
+          if ($LASTEXITCODE) { throw 'Traffic JS checks failed' }
+          node tools/windows-network-panel/test-hotspot.cjs
+          if ($LASTEXITCODE) { throw 'Hotspot JS checks failed' }
+      - name: Browser checks in packaged offline page (mock hotspot)
+        if: matrix.architecture == 'x86_64'
+        shell: powershell
+        run: node tools/windows-network-panel/test-packaged-page.cjs package/portal
