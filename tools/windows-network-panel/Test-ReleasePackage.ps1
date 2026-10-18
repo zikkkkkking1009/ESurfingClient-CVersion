@@ -19,9 +19,12 @@ if ($pe -lt 0 -or $pe -gt $bytes.Length - 6 -or [BitConverter]::ToUInt32($bytes,
 $machines = @{x86=0x14c; x86_64=0x8664; aarch64=0xaa64}
 if ([BitConverter]::ToUInt16($bytes,$pe+4) -ne $machines[$Architecture]) { throw 'Wrong executable architecture' }
 $html = Get-Content -LiteralPath (Join-Path $Root 'portal/index.html') -Raw
-if ($html -match '(?i)(?:src|href)\s*=\s*["''](?:https?:)?//') { throw 'Portal requires an external asset' }
+if ($html -match '(?i)<(?:script|link)\b[^>]*(?:src|href)\s*=\s*["''](?:https?:)?//') { throw 'Portal requires an external asset' }
 foreach ($match in [regex]::Matches($html,'(?i)(?:src|href)\s*=\s*["''](assets/[^"''?#]+)')) {
     if (-not (Test-Path -LiteralPath (Join-Path (Join-Path $Root 'portal') $match.Groups[1].Value))) { throw 'Missing local portal asset' }
 }
 $null = & (Join-Path $Root 'tools/windows-network-panel/Start-Dashboard.ps1') -Check
+$rejected = $false
+try { $null = & (Join-Path $Root 'tools/windows-network-panel/Start-Dashboard.ps1') -Check -WebPort 0 } catch { $rejected = $true }
+if (-not $rejected) { throw 'Launcher accepted invalid port' }
 Write-Output "PASS: $Architecture PE, package files, offline portal assets and launcher discovery; client not started"

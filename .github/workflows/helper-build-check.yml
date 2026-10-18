@@ -49,6 +49,13 @@ jobs:
           & package/tools/windows-network-panel/Get-ValidationEnvironment.ps1 -ClientPath $client
           & tools/windows-network-panel/Test-NetworkPanel.ps1
           & tools/windows-network-panel/Test-HotspotBridge.ps1
+          if ($env:TEST_ARCH -eq 'x86') {
+            $ps32 = "$env:WINDIR/SysWOW64/WindowsPowerShell/v1.0/powershell.exe"
+            & $ps32 -NoProfile -File tools/windows-network-panel/Test-NetworkPanel.ps1
+            if ($LASTEXITCODE) { throw '32-bit traffic checks failed' }
+            & $ps32 -NoProfile -File tools/windows-network-panel/Test-HotspotBridge.ps1
+            if ($LASTEXITCODE) { throw '32-bit bridge checks failed' }
+          }
           node tools/windows-network-panel/test-traffic.cjs
           if ($LASTEXITCODE) { throw 'Traffic JS checks failed' }
           node tools/windows-network-panel/test-hotspot.cjs
